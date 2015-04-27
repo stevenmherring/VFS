@@ -380,9 +380,7 @@ static int wolfs_fsync(struct file *file, loff_t start, loff_t end,
 
 static int wolfs_sync_fs(struct super_block *sb, int wait)
 {
-	int ret = sync_blockdev(sb->s_bdev);
-
-	return ret;
+	return 0;
 }
 
 /* 
@@ -570,6 +568,8 @@ static struct inode *wolfs_setup_inode(struct super_block *sb,
 		i->i_op = &wolfs_special_inode_operations;
 		init_special_inode(i, i->i_mode, i->i_rdev); // duplicates work
 	} else {
+		printk(KERN_ALERT "unknown inode type in setup_inode: %d\n",
+		       i->i_mode);
 		BUG();
 	}
 
@@ -587,9 +587,10 @@ static int wolfs_fill_super(struct super_block *sb, void *data, int silent)
 	struct inode *root = NULL;
 	struct wolfs_metadata meta;
 
-	sb_set_blocksize(sb, WOLFS_BSTORE_BLOCKSIZE);
 	sb->s_op = &wolfs_super_ops;
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
+
+	wolfs_setup_metadata(&meta, 0755 | S_IFDIR, 0, 0);
 
 	root = wolfs_setup_inode(sb, &meta, WOLFS_ROOT_INO);
 	if (IS_ERR(root))
@@ -608,7 +609,7 @@ static int wolfs_fill_super(struct super_block *sb, void *data, int silent)
 static struct dentry *wolfs_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, wolfs_fill_super);
+	return mount_nodev(fs_type, flags, data, wolfs_fill_super);
 }
 
 /*
@@ -616,15 +617,11 @@ static struct dentry *wolfs_mount(struct file_system_type *fs_type,
  */
 static void wolfs_kill_sb(struct super_block *sb)
 {
-	struct block_device *bdev = sb->s_bdev;
-
 	if (sb->s_root) {
 		sync_filesystem(sb);
 	}
-	sync_blockdev(bdev);
 
-	kill_block_super(sb);
-
+	kill_litter_super(sb);
 }
 
 
