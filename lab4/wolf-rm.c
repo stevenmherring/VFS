@@ -9,6 +9,7 @@
 int main(int argc, char **argv) {
   
   int ret = 0;
+  struct wolfs_ioctl_args arg;
  
   int fd = open(".", O_DIRECTORY);
   if(fd < 0) {
@@ -16,7 +17,10 @@ int main(int argc, char **argv) {
     return fd;
   }
 
-  ret = ioctl(fd, WOLFS_LS, NULL);
+  arg.len = strlen(argv[1]);
+  arg.buf = argv[1];
+
+  ret = ioctl(fd, WOLFS_RM, arg);
 
   if(ret != 0) 
     printf("Something went wrong with the ioctl %d\n", ret);

@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
   }
 
   arg.len = strlen(argv[1]);
-  memcpy(&arg.buf, argv[1], arg.len);
+  arg.buf = argv[1];
 
   ret = ioctl(fd, WOLFS_ADD, arg);
 

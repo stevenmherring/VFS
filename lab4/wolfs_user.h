@@ -9,7 +9,7 @@
 /* Argument Structure for add/remove */
 typedef struct wolfs_ioctl_args {
 	unsigned long len; 
-	unsigned long *buf;
+	char *buf;
 } wolfs_ioctl_args;
 
 #endif
