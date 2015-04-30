@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
   arg.len = strlen(argv[1]);
   arg.buf = argv[1];
 
-  ret = ioctl(fd, WOLFS_ADD, arg);
+  ret = ioctl(fd, WOLFS_ADD, &arg);
 
   if(ret != 0) 
     printf("Something went wrong with the ioctl %d\n", ret);
