@@ -5,3 +5,6 @@ modules.order
 *.ko
 *.o
 *.mod.c
+wolf-add
+wolf-rm
+wolf-ls

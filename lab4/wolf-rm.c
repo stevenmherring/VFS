@@ -8,12 +8,24 @@
 
 int main(int argc, char **argv) {
   
-  int ret = 0;
+  int fd, ret = 0;
   struct wolfs_ioctl_args arg;
- 
-  int fd = open(".", O_DIRECTORY);
+  char *src = ".";
+
+  if (argc < 2) {
+    printf("Need an argument\n");
+    // target is the file or directory to add
+    // source is the wolfs mount point the target is removed from
+    printf("Usage: wolf-rm target [source] \n");
+    return -1;
+  }
+
+  if (argc > 2) 
+    src = argv[2];
+  
+  fd = open(src, O_DIRECTORY);
   if(fd < 0) {
-    printf("Failed to open the current dir\n");
+    printf("Failed to open source %s\n", src);
     return fd;
   }
 
