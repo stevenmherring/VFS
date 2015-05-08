@@ -18,6 +18,31 @@
 
 static struct kmem_cache *wolfs_inode_cachep;
 
+/*
+struct wolflist_struct
+holds the list_head for our circular linked list
+holds an inode and dentry, the important information
+also refrences its original path (where it came from)
+and its wolfpath (where it is stored on the wolfs union view)
+*/
+struct wolflist_struct {
+	struct list_head list;
+	struct inode *inode;
+	char wolfpath[255];
+	char originalpath[255];
+};
+
+/*
+struct list_head wolf_list
+initi the list and its head
+*/
+struct list_head wolf_list;
+
+static void iterate_children(struct dentry *d);
+static void add_routine(struct inode *in, struct dentry *dent);
+static void add_to_wolflist(struct inode *in);
+static void cache_maint(struct dentry *dent, struct inode *in);
+
 static inline int wolfs_super_statfs(struct dentry * d, struct kstatfs * buf)
 { return 0; }
 
@@ -125,7 +150,7 @@ static struct dentry *wolfs_lookup(struct inode *dir, struct dentry *dentry,
 	struct inode *inode = NULL;
 	/* Your code here.
 	 *
-	 * You will need to get a non-null inode for 
+	 * You will need to get a non-null inode for
 	 * a name that is present in directory dir.
 	 * You may find it simplest to use the original inode.
 	 * of the other file system.
@@ -160,7 +185,7 @@ static int wolfs_unlink(struct inode *dir, struct dentry *dentry)
 	// initialize at this point. However, when it proceeds to evict, dentry
 	// is detached and we can no long establish meta_key dbt there.
 	// So, do it here
-	
+
 	clear_nlink(inode);
 	mark_inode_dirty(inode);
 
@@ -383,18 +408,20 @@ static int wolfs_sync_fs(struct super_block *sb, int wait)
 	return 0;
 }
 
-/* 
+/*
  * Handler for ioctl commands.  For simplicity, just
  * respond to the ioctl on any file, for the whole file system.
  */
 static
-long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg) 
+long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
+	struct file *filp;
 	int ret = 0;
 	struct wolfs_ioctl_args me_args;
+	struct dentry *dent;
 	char path[255]; //Linux really allows 4K paths, but let's do 256 for simplicity
 	switch (cmd) {
-	case WOLFS_ADD: 
+	case WOLFS_ADD:
 		ret = copy_from_user(&me_args, (void *) arg, sizeof(me_args));
 		if (ret) {
 			printk(KERN_ALERT "Wolfs ADD: bad buffer %p\n",
@@ -420,11 +447,20 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 
-		/* Your code here */
+		/*
+		Sub routine calls, start with getting the file dentry
+		process through iterate_children
+		*/
+		printk(KERN_ERR "what");
+		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
+		printk(KERN_ERR "wtf\n");
+		dent = filp->f_path.dentry;
+		printk(KERN_ERR "Errror? %s\n",dent->d_name.name);
+		iterate_children(dent);
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
 
 		break;
-	case WOLFS_RM: 
+	case WOLFS_RM:
 		ret = copy_from_user(&me_args, (void *) arg, sizeof(me_args));
 		if (ret) {
 			printk(KERN_ALERT "Wolfs ADD: bad buffer %p\n",
@@ -465,6 +501,81 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
+/*
+Sub routine for finding child files of directories during WOLFS_ADD
+*/
+static void iterate_children(struct dentry *d){
+	//struct list_head *ptr;
+	struct dentry *entry;
+	struct inode *tmp_node;
+	/*
+	list_for_each_entry(entry,&d->d_subdirs, d_child) {
+        curname = thedentry->d_name.name;
+        printk(KERN_INFO "Filename: %s \n", curname);
+
+				list_for_each(ptr, &d->d_subdirs) {
+					entry = list_entry(ptr, struct dentry, d_child);
+    }
+	*/
+	printk(KERN_ERR "LIST FOR EACH ENTRY\n");
+	list_for_each_entry(entry,&d->d_subdirs, d_child) {
+		//entry = list_entry(ptr, struct dentry, d_child);
+		printk(KERN_ERR "Entry: %pd\n", entry);
+		/*
+		We have a child dentry of the parent, now check if its a directory or not
+		*/
+		tmp_node = entry->d_inode;
+		printk(KERN_ERR "garbage%lu\n",tmp_node->i_ino);
+		if(S_ISDIR(tmp_node->i_mode)) {
+			//Got a directory, create a wolf_list to represent it, add and add.
+			printk(KERN_ERR "Directory found!\n");
+			add_routine(tmp_node, entry);
+			iterate_children(entry);
+		} else {
+			printk(KERN_ERR "File found!\n");
+			add_routine(tmp_node, entry);
+		} //if dir, else file
+	}
+}//iterate_children
+
+/*
+Sub routine for adding a found file to our wolf_list and d_alloc, d_add
+*/
+static void add_routine(struct inode *in, struct dentry *dent) {
+	add_to_wolflist(in);
+	cache_maint(dent, in);
+}//add_routine
+
+/*
+Sub routine to add to the wolflist
+*/
+static void add_to_wolflist(struct inode *in) {
+	struct wolflist_struct tmp;
+	tmp.inode = in;
+	//after this is working correctly, alter the path data in the struct please
+	list_add(&tmp.list, &wolf_list);
+
+/*struct wolflist_struct {
+		struct list_head list;
+		struct inode *inode;
+		char wolfpath[255];
+		char originalpath[255];
+	}; */
+
+}//add_to_wolflist
+
+/*
+Sub routine for d_alloc and d_add
+*/
+static void cache_maint(struct dentry *dent, struct inode *in) {
+	struct qstr qname;
+	struct dentry *wolfDentry;
+	qname.name = dent->d_name.name;
+	qname.len = strlen(dent->d_name.name);
+	qname.hash = full_name_hash(dent->d_name.name, qname.len);
+	wolfDentry = d_alloc(dent, &qname);
+	d_add(wolfDentry, in);
+}//cache_maint
 
 static const struct file_operations wolfs_file_operations = {
 	/* file file operations */
@@ -599,7 +710,7 @@ static int wolfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_root = d_make_root(root);
 	if (!sb->s_root)
 		return -EINVAL;
-
+	INIT_LIST_HEAD(&wolf_list);
 	return 0;
 }
 
@@ -692,3 +803,4 @@ MODULE_DESCRIPTION("Wolfie File System");
 
 module_init(init_wolfs_fs);
 module_exit(exit_wolfs_fs);
+
