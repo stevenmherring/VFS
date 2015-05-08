@@ -24,12 +24,14 @@ holds the list_head for our circular linked list
 holds an inode and dentry, the important information
 also refrences its original path (where it came from)
 and its wolfpath (where it is stored on the wolfs union view)
+im
 */
 struct wolflist_struct {
 	struct list_head list;
 	struct inode *inode;
 	char wolfpath[255];
 	char originalpath[255];
+	umode_t i_mode;
 };
 
 /*
@@ -452,6 +454,9 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		process through iterate_children
 		*/
 		printk(KERN_ERR "what");
+		/*
+		Should we be able to add individual files or just directories? Hmm
+		*/
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
 		printk(KERN_ERR "wtf\n");
 		dent = filp->f_path.dentry;
@@ -548,21 +553,25 @@ static void iterate_children(struct dentry *d){
 	printk(KERN_ERR "LIST FOR EACH ENTRY\n");
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
 		//entry = list_entry(ptr, struct dentry, d_child);
-		printk(KERN_ERR "Entry: %pd\n", entry);
 		/*
 		We have a child dentry of the parent, now check if its a directory or not
 		*/
-		tmp_node = entry->d_inode;
-		printk(KERN_ERR "garbage%lu\n",tmp_node->i_ino);
-		if(S_ISDIR(tmp_node->i_mode)) {
-			//Got a directory, create a wolf_list to represent it, add and add.
-			printk(KERN_ERR "Directory found!\n");
-			add_routine(tmp_node, entry);
-			iterate_children(entry);
-		} else {
-			printk(KERN_ERR "File found!\n");
-			add_routine(tmp_node, entry);
-		} //if dir, else file
+		if(entry != NULL) {
+			printk(KERN_ERR "Entry: %pd\n", entry);
+			tmp_node = entry->d_inode;
+			if(tmp_node != NULL) {
+				printk(KERN_ERR "garbage%lu\n",tmp_node->i_ino);
+				if(S_ISDIR(tmp_node->i_mode)) {
+					//Got a directory, create a wolf_list to represent it, add and add.
+					printk(KERN_ERR "Directory found!\n");
+					add_routine(tmp_node, entry);
+					iterate_children(entry);
+				} else {
+					printk(KERN_ERR "File found!\n");
+					add_routine(tmp_node, entry);
+				} //if dir, else file
+			}
+		}
 	}
 }//iterate_children
 
@@ -580,14 +589,18 @@ Sub routine to add to the wolflist
 static void add_to_wolflist(struct inode *in) {
 	struct wolflist_struct tmp;
 	tmp.inode = in;
+	tmp.i_mode = in->i_mode;
+	printk(KERN_ERR "--------ORIGINAL MODE: %d\n", in->i_mode);
+	printk(KERN_ERR "--------NEW MODE: %d\n", tmp.i_mode);
+
 	//after this is working correctly, alter the path data in the struct please
 	list_add(&tmp.list, &wolf_list);
-
 /*struct wolflist_struct {
 		struct list_head list;
 		struct inode *inode;
 		char wolfpath[255];
 		char originalpath[255];
+		umode_t imode;
 	}; */
 
 }//add_to_wolflist
