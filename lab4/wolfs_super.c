@@ -1,5 +1,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/dcache.h>
@@ -38,12 +39,12 @@ struct wolflist_struct {
 struct list_head wolf_list
 initi the list and its head
 */
-struct list_head wolf_list;
-
+struct wolflist_struct roots;
+static void ls_routine(int flag);
 static void iterate_children(struct dentry *d, char *path);
-static void add_routine(struct inode *in, struct dentry *dent, struct wolflist_struct tmp);
-static void add_to_wolflist(struct inode *in, struct wolflist_struct tmp);
-static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_struct tmp);
+static void add_routine(struct inode *in, struct dentry *dent, struct wolflist_struct *tmp);
+static void add_to_wolflist(struct inode *in, struct wolflist_struct *tmp);
+static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_struct *tmp);
 
 static inline int wolfs_super_statfs(struct dentry * d, struct kstatfs * buf)
 { return 0; }
@@ -418,9 +419,9 @@ static
 long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct file *filp;
-	struct dentry *dent;
 	int ret = 0;
 	struct wolfs_ioctl_args me_args;
+	struct dentry *dent;
 	char path[255]; //Linux really allows 4K paths, but let's do 256 for simplicity
 	switch (cmd) {
 	case WOLFS_ADD:
@@ -454,12 +455,10 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		Sub routine calls, start with getting the file dentry
 		process through iterate_children
 		*/
-		/*
-		Should we be able to add individual files or just directories? Hmm
-		*/
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
 		dent = filp->f_path.dentry;
 		iterate_children(dent, path);
+		printk(KERN_ERR "Add complete\n");
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
 
 		break;
@@ -494,35 +493,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		break;
 	case WOLFS_LS:
-		/* your code here ------
-		struct kstat fStat;
-		struct dentry *entry;
-		struct list_head *p;
-		//loop relies on there being a linked list structure for the files
-		//file->f_path.dentry->d_subdirsd
-		list_for_each_entry(entry,&d->d_subdirs, d_child) {
-			printk(KERN_ERR "---ERROR---ERROR----\n");
-			// I don't believe stat is kernel space friendly, need an alternative
-			vfs_stat(p, &fStat);
-		//	printk(KERN_ERR "LS Path: %s\n", dentry_path_raw(filp->f_path.dentry,path,255)); //path print
-			printk(KERN_ERR "File Size: \t\t%lld bytes\n",fStat.size); //file size
-			printk(KERN_ERR "Number of Links: \t%d\n",fStat.nlink); //links to this file
-			printk(KERN_ERR "File inode: \t\t%lld\n",fStat.ino); //inode num
-			printk(KERN_ERR "File Permissions: \t");	//header for permissions, below are the permissions like we're used to in linux
-			printk((S_ISDIR(fStat.mode)) ? "d" : "-");
-			printk((fStat.mode & S_IRUSR) ? "r" : "-");
-			printk((fStat.mode & S_IWUSR) ? "w" : "-");
-			printk((fStat.mode & S_IXUSR) ? "x" : "-");
-			printk((fStat.mode & S_IRGRP) ? "r" : "-");
-			printk((fStat.mode & S_IWGRP) ? "w" : "-");
-			printk((fStat.mode & S_IXGRP) ? "x" : "-");
-			printk((fStat.mode & S_IROTH) ? "r" : "-");
-			printk((fStat.mode & S_IWOTH) ? "w" : "-");
-			printk((fStat.mode & S_IXOTH) ? "x" : "-");
-			printk(KERN_ERR "\n\n");
-			//tell us if its a symbolic link, why not?
-			printk("The file %s a symbolic link\n", (S_ISLNK(fStat.mode)) ? "is" : "is not");
-		} ----- */
+		ls_routine(0);
 		break;
 	default:
 		printk(KERN_ALERT "WolFS unknown ioctl %u %lu\n", cmd, arg);
@@ -533,6 +504,30 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 
 /*
+Sub routine for wolf-ls
+*/
+static void ls_routine(int flag) {
+	//flag accepted, to maybe take a -a -l...for now it does nothing
+	struct wolflist_struct *ptr;
+	list_for_each_entry(ptr, &roots.list, list) {
+		if(ptr) {
+			printk(KERN_ERR "File Permissions: ");	//header for permissions, below are the permissions like we're used to in linux
+			printk((S_ISDIR(ptr->i_mode)) ? "d" : "-");
+			printk((ptr->i_mode & S_IRUSR) ? "r" : "-");
+			printk((ptr->i_mode & S_IWUSR) ? "w" : "-");
+			printk((ptr->i_mode & S_IXUSR) ? "x" : "-");
+			printk((ptr->i_mode & S_IRGRP) ? "r" : "-");
+			printk((ptr->i_mode & S_IWGRP) ? "w" : "-");
+			printk((ptr->i_mode & S_IXGRP) ? "x" : "-");
+			printk((ptr->i_mode & S_IROTH) ? "r" : "-");
+			printk((ptr->i_mode & S_IWOTH) ? "w" : "-");
+			printk((ptr->i_mode & S_IXOTH) ? "x" : "-");
+			printk(" || File Path: %s\n", ptr->wolfpath);
+		}
+	}
+}
+
+/*
 Sub routine for finding child files of directories during WOLFS_ADD
 */
 static void iterate_children(struct dentry *d, char *path){
@@ -540,8 +535,6 @@ static void iterate_children(struct dentry *d, char *path){
 	struct dentry *entry;
 	struct inode *tmp_node;
 	char opath[255];
-	char oldpath[255];
-	char path_buf[255];
 	/*
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
         curname = thedentry->d_name.name;
@@ -551,34 +544,30 @@ static void iterate_children(struct dentry *d, char *path){
 					entry = list_entry(ptr, struct dentry, d_child);
     }
 	*/
+	printk(KERN_ERR "LIST FOR EACH ENTRY\n");
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
-		struct wolflist_struct tmp;
+		struct wolflist_struct *tmp;
+		tmp = kmalloc(sizeof(struct wolflist_struct), GFP_KERNEL);
 		//entry = list_entry(ptr, struct dentry, d_child);
 		/*
 		We have a child dentry of the parent, now check if its a directory or not
 		*/
 		if(entry != NULL) {
-			printk(KERN_ERR "Entry: %pd\n", entry);
 			tmp_node = entry->d_inode;
 			if(tmp_node != NULL) {
 				if(S_ISDIR(tmp_node->i_mode)) {
 					//Got a directory, create a wolf_list to represent it, add and add.
-					strcpy(oldpath, path);
 					strncat(path, entry->d_name.name ,strlen(entry->d_name.name));
-					strncat(path, "/", 1);
-					strcpy(tmp.wolfpath, path);
+					strncat(tmp->wolfpath, "/", 1);
+					strcpy(tmp->wolfpath, path);
 					add_routine(tmp_node, entry, tmp);
-					printk(KERN_ERR "Directory found! ----- %s\n", tmp.wolfpath);
-					printk(KERN_ERR "--- %s \n", entry->d_name.name);
-					printk(KERN_ERR "!!! %s \n", dentry_path_raw(entry, path_buf, 255));
-					//iterate_children(entry, path);
-					strcpy(path, oldpath);
+					printk(KERN_ERR "Directory found! ----- %s\n", tmp->wolfpath);
+				//	iterate_children(entry, path);
 				} else {
 					memset(opath, '\0', 255);
 					strncat(opath, path, strlen(path));
 					strncat(opath, entry->d_name.name, strlen(entry->d_name.name));
-					strcpy(tmp.wolfpath, opath);
-					printk(KERN_ERR "File found! ----- %s\n", tmp.wolfpath);
+					strcpy(tmp->wolfpath, opath);
 					add_routine(tmp_node, entry, tmp);
 				} //if dir, else file
 			}
@@ -589,7 +578,7 @@ static void iterate_children(struct dentry *d, char *path){
 /*
 Sub routine for adding a found file to our wolf_list and d_alloc, d_add
 */
-static void add_routine(struct inode *in, struct dentry *dent, struct wolflist_struct tmp) {
+static void add_routine(struct inode *in, struct dentry *dent, struct wolflist_struct *tmp) {
 	add_to_wolflist(in, tmp);
 	cache_maint(dent, in, tmp);
 }//add_routine
@@ -597,14 +586,13 @@ static void add_routine(struct inode *in, struct dentry *dent, struct wolflist_s
 /*
 Sub routine to add to the wolflist
 */
-static void add_to_wolflist(struct inode *in, struct wolflist_struct tmp) {
-	tmp.inode = in;
-	tmp.i_mode = in->i_mode;
-	printk(KERN_ERR "--------ORIGINAL MODE: %d", in->i_mode);
-	printk(KERN_ERR "--------NEW MODE: %d\n", tmp.i_mode);
+static void add_to_wolflist(struct inode *in, struct wolflist_struct *tmp) {
+	tmp->inode = in;
+	tmp->i_mode = in->i_mode;
 
 	//after this is working correctly, alter the path data in the struct please
-	list_add(&tmp.list, &wolf_list);
+	INIT_LIST_HEAD(&tmp->list);
+	list_add(&tmp->list, &roots.list);
 /*struct wolflist_struct {
 		struct list_head list;
 		struct inode *inode;
@@ -624,7 +612,7 @@ Handles filling in of qstr struct for hashing
 Handles hashing of qstr for quick lookup
 Looks up for existing dentry in the cache
 */
-static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_struct tmp) {
+static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_struct *tmp) {
 	struct qstr qname;
 	struct dentry *wolfDentry;
 	struct dentry *lookUpCheck;
@@ -643,7 +631,8 @@ static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_s
 
 	d_add(wolfDentry, in);
 	new_path = dentry_path_raw(dent, new_path_buf, 255);
-	strcpy(tmp.originalpath, new_path);
+
+	strcpy(tmp->originalpath, new_path);
 }//cache_maint
 
 static const struct file_operations wolfs_file_operations = {
@@ -779,7 +768,10 @@ static int wolfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_root = d_make_root(root);
 	if (!sb->s_root)
 		return -EINVAL;
-	INIT_LIST_HEAD(&wolf_list);
+	//struct wolflist_struct roots;
+	roots.inode = root;
+	roots.i_mode = root->i_mode;
+	INIT_LIST_HEAD(&roots.list);
 	return 0;
 }
 
@@ -872,4 +864,3 @@ MODULE_DESCRIPTION("Wolfie File System");
 
 module_init(init_wolfs_fs);
 module_exit(exit_wolfs_fs);
-
