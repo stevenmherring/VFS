@@ -458,9 +458,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		Should we be able to add individual files or just directories? Hmm
 		*/
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
-		printk(KERN_ERR "wtf\n");
 		dent = filp->f_path.dentry;
-		printk(KERN_ERR "Errror? %s\n",dent->d_name.name);
 		iterate_children(dent, path);
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
 
@@ -562,10 +560,8 @@ static void iterate_children(struct dentry *d, char *path){
 			printk(KERN_ERR "Entry: %pd\n", entry);
 			tmp_node = entry->d_inode;
 			if(tmp_node != NULL) {
-				printk(KERN_ERR "garbage%lu\n",tmp_node->i_ino);
 				if(S_ISDIR(tmp_node->i_mode)) {
 					//Got a directory, create a wolf_list to represent it, add and add.
-					printk(KERN_ERR "ddddddddddddddD\n");
 					strncat(path, entry->d_name.name ,strlen(entry->d_name.name));
 					strncat(path, "/", 1);
 					strcpy(tmp.wolfpath, path);
@@ -573,13 +569,9 @@ static void iterate_children(struct dentry *d, char *path){
 					printk(KERN_ERR "Directory found! ----- %s\n", tmp.wolfpath);
 					iterate_children(entry, path);
 				} else {
-					printk(KERN_ERR "aaaaaaaaaaA\n");
 					memset(opath, '\0', 255);
-					printk(KERN_ERR "bbbbbbbbbbbb\n");
 					strncat(opath, path, strlen(path));
-					printk(KERN_ERR "cccccccccccccC\n");
 					strncat(opath, entry->d_name.name, strlen(entry->d_name.name));
-					printk(KERN_ERR "ddddddddD %s - %d\n", opath, strlen(opath));
 					strcpy(tmp.wolfpath, opath);
 					printk(KERN_ERR "File found! ----- %s\n", tmp.wolfpath);
 					add_routine(tmp_node, entry, tmp);
@@ -861,3 +853,4 @@ MODULE_DESCRIPTION("Wolfie File System");
 
 module_init(init_wolfs_fs);
 module_exit(exit_wolfs_fs);
+
