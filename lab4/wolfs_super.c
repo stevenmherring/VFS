@@ -418,9 +418,9 @@ static
 long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct file *filp;
-	struct dentry *dent;
 	int ret = 0;
 	struct wolfs_ioctl_args me_args;
+	struct dentry *dent;
 	char path[255]; //Linux really allows 4K paths, but let's do 256 for simplicity
 	switch (cmd) {
 	case WOLFS_ADD:
@@ -540,8 +540,6 @@ static void iterate_children(struct dentry *d, char *path){
 	struct dentry *entry;
 	struct inode *tmp_node;
 	char opath[255];
-	char oldpath[255];
-	char path_buf[255];
 	/*
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
         curname = thedentry->d_name.name;
@@ -551,6 +549,7 @@ static void iterate_children(struct dentry *d, char *path){
 					entry = list_entry(ptr, struct dentry, d_child);
     }
 	*/
+	printk(KERN_ERR "LIST FOR EACH ENTRY\n");
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
 		struct wolflist_struct tmp;
 		//entry = list_entry(ptr, struct dentry, d_child);
@@ -563,16 +562,12 @@ static void iterate_children(struct dentry *d, char *path){
 			if(tmp_node != NULL) {
 				if(S_ISDIR(tmp_node->i_mode)) {
 					//Got a directory, create a wolf_list to represent it, add and add.
-					strcpy(oldpath, path);
 					strncat(path, entry->d_name.name ,strlen(entry->d_name.name));
 					strncat(path, "/", 1);
 					strcpy(tmp.wolfpath, path);
 					add_routine(tmp_node, entry, tmp);
 					printk(KERN_ERR "Directory found! ----- %s\n", tmp.wolfpath);
-					printk(KERN_ERR "--- %s \n", entry->d_name.name);
-					printk(KERN_ERR "!!! %s \n", dentry_path_raw(entry, path_buf, 255));
-					//iterate_children(entry, path);
-					strcpy(path, oldpath);
+					iterate_children(entry, path);
 				} else {
 					memset(opath, '\0', 255);
 					strncat(opath, path, strlen(path));
@@ -600,7 +595,7 @@ Sub routine to add to the wolflist
 static void add_to_wolflist(struct inode *in, struct wolflist_struct tmp) {
 	tmp.inode = in;
 	tmp.i_mode = in->i_mode;
-	printk(KERN_ERR "--------ORIGINAL MODE: %d", in->i_mode);
+	printk(KERN_ERR "--------ORIGINAL MODE: %d\n", in->i_mode);
 	printk(KERN_ERR "--------NEW MODE: %d\n", tmp.i_mode);
 
 	//after this is working correctly, alter the path data in the struct please
@@ -621,15 +616,15 @@ Sub routine for d_alloc and d_add
 static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_struct tmp) {
 	struct qstr qname;
 	struct dentry *wolfDentry;
-	//char *new_path;
+	char *new_path;
 	char new_path_buf[255];
 	qname.name = dent->d_name.name;
 	qname.len = strlen(dent->d_name.name);
 	qname.hash = full_name_hash(dent->d_name.name, qname.len);
 	wolfDentry = d_alloc(dent, &qname);
 	d_add(wolfDentry, in);
-	dentry_path_raw(dent, new_path_buf, 255);
-	strcpy(tmp.originalpath, dentry_path_raw(dent, new_path_buf, 255));
+	new_path = dentry_path_raw(dent, new_path_buf, 255);
+	strcpy(tmp.originalpath, new_path);
 }//cache_maint
 
 static const struct file_operations wolfs_file_operations = {
