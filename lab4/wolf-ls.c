@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
   
   int ret = 0;
  
-  int fd = open(".", O_DIRECTORY);
+  int fd = open("foo", O_DIRECTORY);
   if(fd < 0) {
     printf("Failed to open the current dir\n");
     return fd;
