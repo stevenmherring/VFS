@@ -100,7 +100,7 @@ static int wolfs_readdir(struct file *file, struct dir_context *ctx)
 	WOLFS_DEBUG_ON(!S_ISDIR(meta.st.st_mode));
 
 	/* Your code here */
- 	
+
 	if (!ctx->pos && !dir_emit_dots(file, ctx))
 		goto out;
 
@@ -481,7 +481,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		/*
 		Sub routine calls, start with getting the file dentry
 		process through iterate_children
-		
+
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
 		dent = filp->f_path.dentry;
 		iterate_children(dent, path);*/
@@ -651,13 +651,13 @@ static void remove_file_from_wolflist(struct file *fileToRemove, struct wolflist
 	struct wolflist_struct *ptr;
 	list_for_each_entry(ptr, &roots.list, list) {
 		printk(KERN_ERR "Entered remove");
-		if (fileToRemove->f_inode->i_ino == ptr->i_ino){
-			list_del(&ptr->list);
+	//	if (fileToRemove->f_inode->i_ino == ptr->i_ino){
+		//	list_del(&ptr->list);
 
-		}
+		//}
 	}
 	//after this is working correctly, alter the path data in the struct please
-	
+
 }//add_to_wolflist
 
 
@@ -667,7 +667,7 @@ static void wolfs_chmod(struct file *fileToModify) {
 
 	struct wolflist_struct *ptr;
 	list_for_each_entry(ptr, &roots.list, list) {
-		
+
 		if (strcmp())
 	//after this is working correctly, alter the path data in the struct please
 	list_remove(&ptr->list, &roots.list);
@@ -678,7 +678,7 @@ static void wolfs_chmod(struct file *fileToModify) {
 
 /*
 Sub routine for d_alloc and d_add
-Handles cache interaction between wolfs and filling the dentries with relevant information from 
+Handles cache interaction between wolfs and filling the dentries with relevant information from
 corresponding inode.
 Handles allocation of memory from slab (slub?)
 Handles filling in of qstr struct for hashing
