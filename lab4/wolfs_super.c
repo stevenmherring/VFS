@@ -451,8 +451,6 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 		memset(path, '\0', 255);
 		path[0] = '/';
-		
-		
 		/*
 		Sub routine calls, start with getting the file dentry
 		process through iterate_children
@@ -537,13 +535,6 @@ static void iterate_children(struct dentry *d, char *path){
 	struct dentry *entry;
 	struct inode *tmp_node;
 	char opath[255];
-	char* backupPath;
-	
-	
-	backupPath = kmalloc(255, GFP_KERNEL);
-	strcpy(backupPath, path);
-	
-	//printk(KERN_ERR "%s-%s\n", backupPath, path);
 	/*
 	list_for_each_entry(entry,&d->d_subdirs, d_child) {
         curname = thedentry->d_name.name;
@@ -571,10 +562,7 @@ static void iterate_children(struct dentry *d, char *path){
 					strcpy(tmp->wolfpath, path);
 					add_routine(tmp_node, entry, tmp);
 					printk(KERN_ERR "Directory found! ----- %s\n", tmp->wolfpath);
-					printk(KERN_ERR "%s----%s\n", tmp->wolfpath, path);
-					
-					//iterate_children(entry, path);
-					strcpy(path, backupPath);
+				//	iterate_children(entry, path);
 				} else {
 					memset(opath, '\0', 255);
 					strncat(opath, path, strlen(path));
@@ -585,8 +573,6 @@ static void iterate_children(struct dentry *d, char *path){
 			}
 		}
 	}
-	
-	kfree(backupPath);
 }//iterate_children
 
 /*
