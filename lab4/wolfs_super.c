@@ -100,12 +100,13 @@ static int wolfs_readdir(struct file *file, struct dir_context *ctx)
 	WOLFS_DEBUG_ON(!S_ISDIR(meta.st.st_mode));
 
 	/* Your code here */
-
+ 	
 	if (!ctx->pos && !dir_emit_dots(file, ctx))
 		goto out;
 
 out:
 	return ret;
+	//file->f_ops->readdir(file,ctx);
 }
 
 static inline void
@@ -173,18 +174,6 @@ static struct dentry *wolfs_lookup(struct inode *dir, struct dentry *dentry,
 	 * a name that is present in directory dir.
 	 * You may find it simplest to use the original inode.
 	 * of the other file system.
-	struct inode *inode = NULL;
-	struct dentry *lookUpCheck;
-	char nametocheck[255];
-
-	nametocheck = dir->d_parent->d_name.name;
-	lookUpCheck = d_lookup(dent,&nametocheck);
-	if (lookUpCheck == NULL){
-		d_add(lookUpCheck,NULL);
-
-	 	} 	else {
-			d_add(lookUpCheck,dir);
-		}
 	 */
 
 }
@@ -342,6 +331,12 @@ static int wolfs_setattr(struct dentry *dentry, struct iattr *iattr)
 				block_num++;
 
 			/* Your code here */
+
+			/*
+			This is basically what I would do, except you may need to find the dentry for the underlying file system
+			 (perhaps by searching the alias list).*/
+			inode->i_op->setattr(dentry,iattr);
+
 		}
 		i_size_write(inode, iattr->ia_size);
 	}
@@ -439,20 +434,23 @@ static int wolfs_sync_fs(struct super_block *sb, int wait)
 	return 0;
 }
 
-
-static void add_file_to_wolflist(struct file *file, struct wolflist_struct *tmp);
-
 /*
  * Handler for ioctl commands.  For simplicity, just
  * respond to the ioctl on any file, for the whole file system.
  */
+
+
+static void remove_file_from_wolflist(struct file *fileToRemove, struct wolflist_struct *tmp) ;
+static void add_file_to_wolflist(struct file *file, struct wolflist_struct *tmp) ;
+
 static
 long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct file *filp;
+	struct wolflist_struct *tmp;
 	int ret = 0;
 	struct wolfs_ioctl_args me_args;
-	struct dentry *dent;
+	//struct dentry *dent;
 	char path[255]; //Linux really allows 4K paths, but let's do 256 for simplicity
 	switch (cmd) {
 	case WOLFS_ADD:
@@ -489,8 +487,6 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		iterate_children(dent, path);*/
 
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
-
-		struct wolflist_struct *tmp;
 		tmp = kmalloc(sizeof(struct wolflist_struct), GFP_KERNEL);
 		add_file_to_wolflist(filp,tmp);
 
@@ -525,6 +521,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 
 		/* Your code here */
+		remove_file_from_wolflist(file,tmp);
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
 
 		break;
@@ -548,15 +545,15 @@ static void ls_routine(int flag) {
 	list_for_each_entry(ptr, &roots.list, list) {
 		if(ptr) {
 			printk(KERN_ERR "File Permissions: ");	//header for permissions, below are the permissions like we're used to in linux
-			//printk((S_ISDIR(ptr->i_mode)) ? "d" : "-");
+			//printk((S_ISDIR(ptr->file->f_imode)) ? "d" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IRUSR) ? "r" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IWUSR) ? "w" : "-");
-			printk((ptr->file->f_inode->i_mode & S_IXUSR) ? "x" : "-");
+			printk((ptr->file->f_inode->i_mode  & S_IXUSR) ? "x" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IRGRP) ? "r" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IWGRP) ? "w" : "-");
-			printk((ptr->file->f_inode->i_mode & S_IXGRP) ? "x" : "-");
+			printk((ptr->file->f_inode->i_mode  & S_IXGRP) ? "x" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IROTH) ? "r" : "-");
-			printk((ptr->file->f_inode->i_mode & S_IWOTH) ? "w" : "-");
+			printk((ptr->file->f_inode->i_mode  & S_IWOTH) ? "w" : "-");
 			printk((ptr->file->f_inode->i_mode & S_IXOTH) ? "x" : "-");
 			printk(" || File Path: %s\n", ptr->file->f_path.dentry->d_name.name);
 		}
@@ -648,6 +645,34 @@ static void add_file_to_wolflist(struct file *file, struct wolflist_struct *tmp)
 	list_add(&tmp->list, &roots.list);
 }//add_to_wolflist
 
+
+static void remove_file_from_wolflist(struct file *fileToRemove, struct wolflist_struct *tmp) {
+
+	struct wolflist_struct *ptr;
+	list_for_each_entry(ptr, &roots.list, list) {
+		printk(KERN_ERR "Entered remove");
+		if (fileToRemove->f_inode->i_ino == ptr->i_ino){
+			list_del(&ptr->list);
+
+		}
+	}
+	//after this is working correctly, alter the path data in the struct please
+	
+}//add_to_wolflist
+
+
+
+/*
+static void wolfs_chmod(struct file *fileToModify) {
+
+	struct wolflist_struct *ptr;
+	list_for_each_entry(ptr, &roots.list, list) {
+		
+		if (strcmp())
+	//after this is working correctly, alter the path data in the struct please
+	list_remove(&ptr->list, &roots.list);
+}//add_to_wolflist
+*/
 
 
 
