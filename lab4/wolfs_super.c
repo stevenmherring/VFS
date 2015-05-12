@@ -92,20 +92,47 @@ static int wolfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 static struct inode *wolfs_setup_inode(struct super_block *sb,
 				struct wolfs_metadata *meta, ino_t ino);
 
+static int remove_file_from_wolflist(char *fileToRemove, struct wolflist_struct *tmp) ;
+
 static int wolfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	int ret = 0;
 	//struct inode *inode = file_inode(file);
 
-	WOLFS_DEBUG_ON(!S_ISDIR(meta.st.st_mode));
+	//WOLFS_DEBUG_ON(!S_ISDIR(meta.st.st_mode));
 
 	/* Your code here */
 
-	if (!ctx->pos && !dir_emit_dots(file, ctx))
-		goto out;
 
-out:
-	return ret;
+	struct wolflist_struct *ptr;
+	struct dir_context *newctx ;
+
+	newctx = kmalloc ((sizeof(struct dir_context)*2),GFP_KERNEL);
+	int count =0;
+		//lsptr = ptr;
+
+	newctx = ctx;
+
+	list_for_each_entry(ptr, &roots.list, list) {
+		//printk(KERN_ERR "enter enter enter\n");
+
+
+		if (!ctx->pos && !dir_emit_dots(file, ctx))
+		return ret;
+
+		printk(KERN_ERR " in list for each %s\n",ptr->file->f_path.dentry->d_name.name);
+
+		ret = ptr->file->f_op->iterate(ptr->file,newctx);
+		//return ret;
+	//	lsptr = ptr;
+		//return ptr->file->f_op->iterate(file,ctx);
+
+
+	}
+ return ret;
+	return 0;
+	/*if (!ctx->pos && !dir_emit_dots(file, ctx))
+		return ret;*/
 	//file->f_ops->readdir(file,ctx);
 }
 
@@ -140,9 +167,21 @@ wolfs_setup_metadata(struct wolfs_metadata *meta, umode_t mode, loff_t size,
 static int wolfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		bool excl)
 {
+	struct inode *myinode;
 	int ret = 0;
+	/*struct file* newFile;
 
-	/* Your code here. */
+	if(S_ISDIR(dir->i_mode)){
+		newFile = filp_open(dentry->d_name.name, O_DIRECTORY,0);
+	} else newFile = filp_open(dentry->d_name.name, O_CREAT | O_EXCL,0);
+
+
+
+	 Your code here. */
+	//d_instantiate (dir,dentry);
+	//vfs_mkdir(dir,dentry,mode);
+	printk(KERN_ERR "Create \n");
+	dir->i_op->mkdir(myinode,dentry,mode);
 	return ret;
 }
 
@@ -165,18 +204,33 @@ static int wolfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 static struct dentry *wolfs_lookup(struct inode *dir, struct dentry *dentry,
 	unsigned int flags)
 {
-
-	return d_splice_alias(dir, dentry);
-
+	struct dentry *wolfDentry;
+	struct qstr qname;
+	char buff_path[255];
+	qname = fill_qstr_struct(dentry);
+	//qname.name = NULL;
+	wolfDentry = d_lookup(dentry, &qname);
+	if(wolfDentry == NULL) {
+		printk("\nDENTRY NOT FOUND\n-----------\nADDING DENTRY\n------------\n\n");
+		printk("\n %s \n", qname.name);
+		printk("\n %s \n", dentry_path_raw(dentry, buff_path , 255));
+		wolfDentry = d_alloc(dentry, &qname);
+		//d_add(wolfDentry, dir);
+	} else {
+		//Nothing to do?
+	}
+	//return wolfDentry;
+	//return d_splice_alias(dir, wolfDentry);
+	d_add(wolfDentry, dir);
+	return wolfDentry;
 	/* Your code here.
-	 *
 	 * You will need to get a non-null inode for
 	 * a name that is present in directory dir.
 	 * You may find it simplest to use the original inode.
-	 * of the other file system.
+	 	* of the other file system.
 	 */
-
 }
+
 
 static void wolfs_evict_inode(struct inode* inode)
 {
@@ -217,6 +271,7 @@ static int wolfs_unlink(struct inode *dir, struct dentry *dentry)
  */
 static int wolfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
+	printk(KERN_ERR "I did this \n");
 	return wolfs_create(dir, dentry, mode | S_IFDIR, 0);
 }
 
@@ -316,7 +371,8 @@ static int wolfs_setattr(struct dentry *dentry, struct iattr *iattr)
 {
 	struct inode *inode = dentry->d_inode;
 	int ret;
-
+	struct wolflist_struct *ptr;
+	printk(KERN_ERR "Entered settattr\n");
 	ret = inode_change_ok(inode, iattr);
 	if (ret)
 		goto out;
@@ -335,8 +391,12 @@ static int wolfs_setattr(struct dentry *dentry, struct iattr *iattr)
 			/*
 			This is basically what I would do, except you may need to find the dentry for the underlying file system
 			 (perhaps by searching the alias list).*/
-			inode->i_op->setattr(dentry,iattr);
+			list_for_each_entry(ptr, &roots.list, list) {
+				if (strcmp(ptr->file->f_path.dentry->d_name.name,dentry->d_name.name)== 0){
 
+					return inode->i_op->setattr(ptr->file->f_path.dentry,iattr);
+				}
+			}
 		}
 		i_size_write(inode, iattr->ia_size);
 	}
@@ -390,11 +450,12 @@ static const struct inode_operations wolfs_special_inode_operations = {
 static int wolfs_mknod(struct inode *dir, struct dentry *dentry,  umode_t mode,
 		dev_t rdev)
 {
+
 	struct inode *inode;
 	char *path, *path_buf;
 	int ret = 0;
 	struct wolfs_metadata meta;
-
+	printk(KERN_ERR "Fuck fuck fuck\n");
 	if (!new_valid_dev(rdev)) {
 		ret = -EINVAL;
 		goto out;
@@ -440,7 +501,7 @@ static int wolfs_sync_fs(struct super_block *sb, int wait)
  */
 
 
-static void remove_file_from_wolflist(struct file *fileToRemove, struct wolflist_struct *tmp) ;
+static int remove_file_from_wolflist(char *fileToRemove, struct wolflist_struct *tmp) ;
 static void add_file_to_wolflist(struct file *file, struct wolflist_struct *tmp) ;
 
 static
@@ -450,6 +511,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct wolflist_struct *tmp;
 	int ret = 0;
 	struct wolfs_ioctl_args me_args;
+	struct wolflist_struct *ptr;
 	//struct dentry *dent;
 	char path[255]; //Linux really allows 4K paths, but let's do 256 for simplicity
 	switch (cmd) {
@@ -489,6 +551,11 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		filp = filp_open(me_args.buf, O_DIRECTORY, 0);
 		tmp = kmalloc(sizeof(struct wolflist_struct), GFP_KERNEL);
 		add_file_to_wolflist(filp,tmp);
+		list_for_each_entry(ptr, &roots.list, list) {
+			if(ptr) {
+				printk("New list is: %s\n", ptr->file->f_path.dentry->d_name.name);
+			}
+		}
 
 		printk(KERN_ERR "Add complete\n");
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
@@ -521,7 +588,7 @@ long wolfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 
 		/* Your code here */
-		remove_file_from_wolflist(file,tmp);
+		remove_file_from_wolflist(me_args.buf,tmp);
 		printk(KERN_ERR "Me args (%lu, %p)\n", me_args.len, me_args.buf);
 
 		break;
@@ -639,23 +706,30 @@ static void add_to_wolflist(struct inode *in, struct wolflist_struct *tmp) {
 Sub routine to add file to the wolflist
 */
 static void add_file_to_wolflist(struct file *file, struct wolflist_struct *tmp) {
-	tmp->file = file;
+	tmp->file = *&file;
 	//after this is working correctly, alter the path data in the struct please
 	INIT_LIST_HEAD(&tmp->list);
 	list_add(&tmp->list, &roots.list);
 }//add_to_wolflist
 
 
-static void remove_file_from_wolflist(struct file *fileToRemove, struct wolflist_struct *tmp) {
+static int remove_file_from_wolflist(char *fileToRemove, struct wolflist_struct *tmp) {
 
 	struct wolflist_struct *ptr;
 	list_for_each_entry(ptr, &roots.list, list) {
-		printk(KERN_ERR "Entered remove");
-	//	if (fileToRemove->f_inode->i_ino == ptr->i_ino){
-		//	list_del(&ptr->list);
+		printk(KERN_ERR "Entered remove \n");
+		printk(KERN_ERR "fileToRemove %s \n",fileToRemove);
+		printk(KERN_ERR "listfile %s \n",ptr->file->f_path.dentry->d_name.name);
+		printk(KERN_ERR "strcmp %d ",strcmp(fileToRemove,ptr->file->f_path.dentry->d_name.name));
+		if (strcmp(fileToRemove,ptr->file->f_path.dentry->d_name.name) == 0){
 
-		//}
+			list_del(&ptr->list);
+			return 0;
+
+		} else printk(KERN_ERR "Target not found\n");
 	}
+
+	return 1;
 	//after this is working correctly, alter the path data in the struct please
 
 }//add_to_wolflist
@@ -695,12 +769,13 @@ static void cache_maint(struct dentry *dent, struct inode *in, struct wolflist_s
 	struct qstr qname = fill_qstr_struct(dent);
 	wolfDentry = d_alloc(dent, &qname);
 
-
 	d_add(wolfDentry, in);
 	new_path = dentry_path_raw(dent, new_path_buf, 255);
 
 	strcpy(tmp->originalpath, new_path);
 }//cache_maint
+
+
 
 static const struct file_operations wolfs_file_operations = {
 	/* file file operations */
@@ -931,3 +1006,4 @@ MODULE_DESCRIPTION("Wolfie File System");
 
 module_init(init_wolfs_fs);
 module_exit(exit_wolfs_fs);
+

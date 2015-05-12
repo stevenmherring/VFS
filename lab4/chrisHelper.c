@@ -8,7 +8,7 @@ RM == 1
 CHMOD == 2
 
 static int iterate_through_inodelist (struct inode *in, int flags, void *information){
-	
+
 	struct inode *inodePtr;
 	struct dentry *lsDentry;
 	struct file *lsFile;
@@ -35,13 +35,9 @@ static int iterate_through_inodelist (struct inode *in, int flags, void *informa
 }*/
 
 static struct qstr fill_qstr_struct (struct dentry *dentToParse){
-
 	struct qstr qname;
-
 	qname.name = dentToParse->d_name.name;
 	qname.len = strlen(dentToParse->d_name.name);
 	qname.hash = full_name_hash(dentToParse->d_name.name, qname.len);
 	return qname;
 }
-	
-
