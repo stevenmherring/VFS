@@ -1,5 +1,140 @@
-Describe how you implemented the main programming assignment. The README
-file should describe what you did, what approach you took, results of any
-measurements you made, which files are included in your submission and what
-they are for, etc.  Feel free to include any other information you think is
-helpful to us in this README; it can only help your grade.
+********************
+We had to make a change to the WOLF-LS.c file, we defaulted the directory in attempts to wolf-ls on to "foo". This is because  "." would never find the root. Assuming because the module is loaded from a directory below foo, maybe.
+We weren't sure, but couldn't get it to work correctly otherwise, so in all test cases we made the mount directory foo which resides next to the .ko and .o files in the main file system.
+********************
+
+Things that we were able to do:
+Mount file systen
+Add directories to the file system
+wolf-ls print to dmesg the correct information
+wolf-rm removes correctly
+ls, chmod work correctly from shell
+creating files via any type of shell command (echo test > test.txt) creates a file but makes it a directory every time. I believe a case in wolfs_create needed to be handled for files.
+
+
+Initially we did most of the heavy work inside the IOCTL, Wolf-ADD added the files of added directories to our wolfs file tree, added dentries to the cache and created copies of the files for our wolfs to own
+and operate on separately from the original file system. We made everything operate off of the list in hopes we were doing copy on write from the start. This involved walking the original list, copying files over,
+creating our own inodes etc.
+
+After building that implementation we realized shell commands like ls and chmod werent going to work. We ditched that idea.
+Though we were able to reuse much of the functionality we figured out from that implementation. This is why there may be unused, or awkward functions in our handin copy (such as iterate_children).
+
+Wolf-ADD functions to our knowledge, correctly.
+Wolf-LS functions to our knowledge, correctly. (the printk print out permissions of the file on the original file system in ls -l format)
+Wolf-RM functions to our knowledge, correctyl.
+
+strace was critical in finding out what processes used what hooks.
+
+Our approach was to create a struct that housed all the pertinent information we needed, some of it is archaic and some still necessary. This is our wolflist_struct. Major members were the list_head, file*, inode* and u_mode.
+We used this to build our file tree in the wolfs. During add, we create a struct referencing the directory that was requested, doing the necessary work to fill that entry into the wolf list.
+
+Wolfs_lookup is fairly bare but it made other processes work,
+it assigns a new dentry to d_lookup, if the return is NULL we allocate (with d_alloc) a spot in the cache and then add (d_add) it, returning the resulting dentry from d_alloc.
+
+------------------------------------------------------------------------------------------------------
+
+Readme:
+
+Virtual Filesystem view by Steven Herring and Christopher John Ryan
+
+The approach that we took for this project was twofold.
+
+
+Our first interpretation of this homework was assignment was to rebuild the entire mounted filesystem.
+
+/* Historical Background */
+The base of this approach can be found in the iterate children method. This is included for historic purposes.
+
+In this approach, Steven and I traversed the structs that we were passed in,  by iterating through the children of the directory that was passed in to us through the WOLF-ADD ioctl system call.
+
+The directories children were found by navigating the d_subdirs, and then iterating over every list_head element to build our wolfs file system based off of this first newly added directory.
+
+We approached this in a concept of a radix tree copy on write, where we would begin building the inodes of the filesystem based on each newly discovered child, and adding these to the superblock (which would act as the root of our new tree). This system would existly entirely in memory, and would not persist throughout wolfs system wipes due to any dependencies for saving to disk.
+
+This method could have been serialized as a tree traversal which would navigate in order to build our file system into an array, and write these bytes out to another device.
+
+The issues with this approach were the fact that 1, it was not the actual implementation necessitated in the assignment, and 2, that this system would have resulted in write times which were worse than in better fs.
+
+/* Usage of the Wolfs-HW4 implemented by Steven Herring and Chris Ryan */
+
+In order ot begin using the wolfs system, please mount it to the devices file system using the command:
+
+sudo umount wolfs wolfs foo
+
+Following this command, you will be able to add directories into the wolfs file system list using the command:
+
+./wolf-add bar foo
+
+With this done, you are now able to type
+
+ls foo
+
+And you will see the contents of the directory bar, which are now represented within our file system.
+
+If you type the command:
+
+./wolf-ls
+
+You will now see that our filesystem consists of the union bar. We can add to this by the following command:
+
+./wolf-add newdir foo
+
+Following this, we are able to type the command wolf-ls again and see that this new union consists of two directories.
+
+You may now also type the following command to remove newdir from our union
+
+./wolf-RM newdir foo
+
+Checking wolf-ls again, you will see that this removes the newdir from our list of unioned directories.
+
+Our file system also implements a permission checking system, which will necessitate on the VM that the folder foo is
+currently owned by the mounted file system.
+
+From this point, when your current working directory is foo, you will be able to change the permission of anything that exists in the folder bar.
+
+This is implemented by hooking our file system into the originating file system, and calling this filesystems chmod function.
+
+The CHMOD function will allow for the permission change of any of the union directory, granted that they are using the sudo command to intercept permission checking of the original filesystems parent directory.
+
+The LS function is also implemented by hooking into the original file systems ls command, and therefore supports argument flags as per the specification of the POSIX compliant LS Function.
+
+------------------------------------------------------------------------------------------------------
+
+Lookup required a modification to allow the kernel to hook in to our wolfs_mkdir and wolfs_create functions.
+The idea behind this was first checking if our dentry has an inode in the cache.
+If it doesn't and the operation is not ls or chmod then we need the kernel to hook in to our functions, so we create a new dentry, fill it with the contents of the dentry we were originally searching with,
+but set it's inode to NULL. After creating this negative dentry, NULL can be returned and the kernel will hook in to our function.
+
+------------------------------------------------------------------------------------------------------
+
+Although mkdir is not working, our thought process behind it was this.
+We are provided with a negative dentry, the inode of the parent directory and some flags.
+Since wolfs_mkdir only calls wolfs_create with a directory flag, a new inode needs to be created and linked to the negative dentry (that was previously added to the cache) within wolfs_create.
+So we use the parent directories' inode i_op's to call mkdir and pass over the parent inode, neagtive dentry and flags.
+For some reason this causes either an infinite loop and hangs or the process is killed due to a null dereference, it depends on the implementation.
+
+------------------------------------------------------------------------------------------------------
+
+wolfs_unlink:
+Iterates through our wolfs internal linked list to find the file who's inode matches the one passed into the function.
+If it matches, call the unlink() function from i_op on that inode. This will remove the file, but not the path from our wolfs internal linked list.
+
+bash commands to test, supposing file.txt is a file and file_dir is a dir inside foo:
+unlink file.txt
+rm file.txt
+rmdir file_dir
+
+We were unable to properly test wolfs_unlink with the unlink user command because our files become directories due to an issue with statfs.
+When we test wolfs_unlink with rmdir, this causes a segmentation fault.
+However, this already happens with Professor Porter's default code. We suspect is that wolfs_unlink is written properly, it's just not getting properly hooked.
+
+------------------------------------------------------------------------------------------------------
+
+Team note;
+Overall this assignment was tough, but it forced a lot of research and testing. We were able to learn a lot just from programming inside the kernel but also from the amount of resources we tried to get through looking for insight.
+The amount of effort, code reading and bug tracking definitely made us better programmers, even if we never touch kernel code again. Although a few of us are inspired to now.
+
+Christopher Ford
+Christopher Ryan
+Sherry Shi
+Steven Herring

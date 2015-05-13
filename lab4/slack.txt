@@ -1,1 +1,10 @@
-Cumulative Late Hours Used: 0
+Cumulative Late Hours Used: 66 Hours used.
+
+Chris Ford and Sherry Shi came to the group with 4 late hours used. (2*72) - (2*4) = 136 hours remaining.
+
+Chris Ryan and Steven Herring came to the group with 6.5 late hours used. (2*72) - (2*6.5) = 131 hours remaining.
+
+131 + 136 = 267
+267 / 4 = 66.75 hours remaining.
+
+11:59 PM Sunday + 66.75 hours = New Due Date 6:45 PM Wednesday.
