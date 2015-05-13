@@ -216,6 +216,10 @@ static struct dentry *wolfs_lookup(struct inode *dir, struct dentry *dentry,
 		printk("\n %s \n", dentry_path_raw(dentry, buff_path , 255));
 		wolfDentry = d_alloc(dentry, &qname);
 		//d_add(wolfDentry, dir);
+		if(flags !=0 && flags != 1) {
+			d_add(wolfDentry, NULL);
+			return NULL;
+		}
 	} else {
 		//Nothing to do?
 	}
