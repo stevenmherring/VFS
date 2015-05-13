@@ -346,8 +346,8 @@ static int wolfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 				goto abort;
 			}
 
-		}
 	} else {
+		}
 		new_path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
 		if (new_path_buf == NULL) {
 			ret = -ENOMEM;
@@ -1006,4 +1006,3 @@ MODULE_DESCRIPTION("Wolfie File System");
 
 module_init(init_wolfs_fs);
 module_exit(exit_wolfs_fs);
-
